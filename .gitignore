@@ -1,0 +1,13 @@
+# Dependencies and generated local output
+node_modules/
+coverage/
+*.log
+
+# Local deployment configuration
+.env
+.env.*
+!.env.example
+
+# Editor files
+.vscode/
+.idea/

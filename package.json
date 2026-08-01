@@ -1,0 +1,18 @@
+{
+  "name": "lovelace-kimai-work-card",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Home Assistant Lovelace card for Kimai current work.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "npm run typecheck && npm run test && npm run build && node --check dist/kimai-work-card.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}
