@@ -4,6 +4,8 @@ Experimental Lovelace card for showing and controlling the current Kimai
 timesheet through Home Assistant. It requires the separate Home Assistant
 Kimai integration; it never receives a Kimai URL or API token.
 
+![Kimai Work Card icon](assets/kimai-work-card-icon.png)
+
 > This is an experimental project. Read the [disclaimer](DISCLAIMER.md) before
 > relying on it.
 
