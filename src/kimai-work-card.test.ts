@@ -44,6 +44,32 @@ describe("Kimai Work Card actions", () => {
     expect(card._status()).toBe("idle");
   });
 
+  it("uses the circle as the finish control when enabled", () => {
+    const card = new KimaiWorkCard();
+    card.setConfig({ entity: "sensor.kimai_current_work", circle_controls: true });
+
+    const markup = card._renderActive({});
+    expect(markup).toContain('data-action="ring-control"');
+    expect(markup).toContain('aria-label="Finalizar"');
+    expect(markup).not.toContain('data-action="finish"');
+  });
+
+  it("renders finish confirmation inside the card instead of using a browser dialog", () => {
+    const card = new KimaiWorkCard();
+    card.setConfig({ entity: "sensor.kimai_current_work", confirm_finish: true });
+    (card as any)._entity = { state: "running", attributes: {} };
+
+    card._requestFinish();
+    expect(card.shadowRoot?.innerHTML).toContain("¿Finalizar el registro actual?");
+  });
+
+  it("removes the action footer when finish is hidden", () => {
+    const card = new KimaiWorkCard();
+    card.setConfig({ entity: "sensor.kimai_current_work", show_finish: false });
+
+    expect(card._renderActive({})).not.toContain('class="footer"');
+  });
+
   it("does not submit a second service call while one is running", async () => {
     let resolveFirstCall: (() => void) | undefined;
     const callService = () => new Promise<void>((resolve) => {

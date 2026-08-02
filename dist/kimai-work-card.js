@@ -6,21 +6,18 @@ var DEFAULTS = Object.freeze({
   title: "Trabajo actual",
   theme: "auto",
   accent_color: "",
+  show_header: true,
   show_customer: true,
   show_description: true,
   show_last_started: true,
   show_progress_ring: true,
-  show_refresh: true,
-  show_pause: true,
   show_finish: true,
-  show_change: true,
+  circle_controls: false,
   compact: false,
-  confirm_finish: false,
-  quick_actions: []
+  confirm_finish: false
 });
 var ICONS = Object.freeze({
   briefcase: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5V3h6v2h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4Zm2 0h2V4h-2v1Zm-6 6v7h14v-7h-5v2h-4v-2H5Zm7 0v-1h-2v1h2ZM5 7v2h5V8h4v1h5V7H5Z"/></svg>',
-  pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7V5Zm7 0h3v14h-3V5Z"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg>',
   stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6V6Z"/></svg>',
   swap: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4V8H6V6h10V3ZM8 13v3h10v2H8v3l-4-4 4-4Z"/></svg>',
@@ -72,6 +69,7 @@ var KimaiWorkCard = class extends HTMLElement {
     this._entity = void 0;
     this._timerHandle = void 0;
     this._busy = "";
+    this._confirmingFinish = false;
     this._errorMessage = "";
     this._dialogOpen = false;
     this._dialogMode = "start";
@@ -109,6 +107,7 @@ var KimaiWorkCard = class extends HTMLElement {
               }
             },
             { name: "accent_color", selector: { text: {} } },
+            { name: "show_header", selector: { boolean: {} } },
             { name: "compact", selector: { boolean: {} } },
             { name: "confirm_finish", selector: { boolean: {} } }
           ]
@@ -123,28 +122,8 @@ var KimaiWorkCard = class extends HTMLElement {
             { name: "show_description", selector: { boolean: {} } },
             { name: "show_last_started", selector: { boolean: {} } },
             { name: "show_progress_ring", selector: { boolean: {} } },
-            { name: "show_refresh", selector: { boolean: {} } },
-            { name: "show_pause", selector: { boolean: {} } },
             { name: "show_finish", selector: { boolean: {} } },
-            { name: "show_change", selector: { boolean: {} } },
-            {
-              name: "quick_actions",
-              selector: {
-                object: {
-                  label_field: "name",
-                  description_field: "description",
-                  multiple: true,
-                  fields: {
-                    name: { label: "Nombre", required: true, selector: { text: {} } },
-                    project_id: { label: "Proyecto ID", required: true, selector: { number: { min: 1, mode: "box" } } },
-                    activity_id: { label: "Actividad ID", required: true, selector: { number: { min: 1, mode: "box" } } },
-                    description: { label: "Descripci\xF3n", selector: { text: {} } },
-                    billable: { label: "Facturable", selector: { boolean: {} } },
-                    tags: { label: "Etiquetas", selector: { text: {} } }
-                  }
-                }
-              }
-            }
+            { name: "circle_controls", selector: { boolean: {} } }
           ]
         }
       ],
@@ -155,17 +134,15 @@ var KimaiWorkCard = class extends HTMLElement {
           config_entry_id: "ID de entrada de configuraci\xF3n (solo si hay varias cuentas)",
           theme: "Tema",
           accent_color: "Color de acento CSS, por ejemplo #2aa7ff",
+          show_header: "Mostrar cabecera",
           compact: "Modo compacto",
           confirm_finish: "Confirmar antes de finalizar",
           show_customer: "Mostrar cliente",
           show_description: "Mostrar descripci\xF3n",
           show_last_started: "Mostrar hora de inicio",
           show_progress_ring: "Mostrar anillo del cron\xF3metro",
-          show_refresh: "Mostrar actualizar",
-          show_pause: "Mostrar pausa/reanudaci\xF3n",
           show_finish: "Mostrar finalizar",
-          show_change: "Mostrar cambiar actividad",
-          quick_actions: "Acciones r\xE1pidas"
+          circle_controls: "Controlar con el c\xEDrculo"
         };
         return labels[schema.name];
       },
@@ -219,40 +196,15 @@ var KimaiWorkCard = class extends HTMLElement {
   _locale() {
     return this._hass?.locale?.language || this._hass?.language || "es-ES";
   }
-  _storageKey() {
-    return `kimai-work-card:${this._config?.entity || "unknown"}:paused`;
-  }
-  _readPaused() {
-    try {
-      const raw = window.localStorage.getItem(this._storageKey());
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!asInteger(parsed.project_id) || !asInteger(parsed.activity_id)) return null;
-      return parsed;
-    } catch (_err) {
-      return null;
-    }
-  }
-  _writePaused(value) {
-    try {
-      if (value) window.localStorage.setItem(this._storageKey(), JSON.stringify(value));
-      else window.localStorage.removeItem(this._storageKey());
-    } catch (_err) {
-    }
-  }
   _status() {
     const state = this._entity?.state;
     if (!this._entity) return "missing";
     if (["unavailable", "unknown"].includes(state)) return "unavailable";
     if (state === "multiple") return "multiple";
     if (state === "running") return "working";
-    if (state === "idle" && this._readPaused()) return "paused";
     return "idle";
   }
   _elapsedSeconds() {
-    if (this._status() !== "working") {
-      return Number(this._readPaused()?.elapsed_seconds) || 0;
-    }
     const attrs = this._entity?.attributes || {};
     const begin = attrs.begin ? new Date(attrs.begin) : null;
     if (begin && !Number.isNaN(begin.getTime())) {
@@ -286,17 +238,7 @@ var KimaiWorkCard = class extends HTMLElement {
     }
   }
   _displayData() {
-    const attrs = this._entity?.attributes || {};
-    const paused = this._readPaused();
-    return this._status() === "paused" ? {
-      customer: paused.customer,
-      project: paused.project,
-      activity: paused.activity,
-      description: paused.description,
-      begin: paused.begin,
-      timesheet_id: void 0,
-      active_count: 0
-    } : attrs;
+    return this._entity?.attributes || {};
   }
   _render() {
     if (!this.shadowRoot || !this._config) return;
@@ -304,12 +246,13 @@ var KimaiWorkCard = class extends HTMLElement {
     const data = this._displayData();
     const themeClass = ["light", "dark"].includes(this._config.theme) ? `forced-${this._config.theme}` : "";
     const accentStyle = this._config.accent_color ? `--kimai-accent:${escapeHtml(this._config.accent_color)};` : "";
+    const activeHasFooter = this._config.show_finish && !(this._config.circle_controls && this._config.show_progress_ring);
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
-      <article class="card ${themeClass} ${this._config.compact ? "compact" : ""}" style="${accentStyle}">
+      <article class="card ${themeClass} ${this._config.compact ? "compact" : ""} ${activeHasFooter ? "with-active-footer" : ""}" style="${accentStyle}">
         ${this._renderHeader(status, data)}
         ${this._errorMessage ? `<div class="message error" role="alert">${ICONS.warning}<span>${escapeHtml(this._errorMessage)}</span></div>` : ""}
-        ${status === "working" || status === "paused" ? this._renderActive(status, data) : this._renderIdle(status)}
+        ${status === "working" ? this._renderActive(data) : this._renderIdle(status)}
       </article>
       ${this._dialogOpen ? this._renderDialog() : ""}
     `;
@@ -318,34 +261,24 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   _renderHeader(status, data) {
     const activeCount = Number(data.active_count) || 0;
-    const statusLabel = {
-      working: "En curso",
-      multiple: `${activeCount || "Varios"} registros activos`,
-      paused: "Pausado",
-      idle: "Sin actividad",
-      missing: "Entidad no encontrada",
-      unavailable: "No disponible"
-    }[status];
-    const tone = status === "working" ? "success" : status === "paused" || status === "multiple" ? "warning" : status === "unavailable" || status === "missing" ? "danger" : "neutral";
+    const started = this._config.show_last_started && status === "working" && data.begin ? `<div class="started header-started">${ICONS.clock}<span>Iniciada a las ${escapeHtml(formatClockTime(data.begin, this._locale()))}</span></div>` : "";
     return `
-      <header class="header">
+      <header class="header ${this._config.show_header ? "" : "without-heading"} ${this._config.show_header || started ? "" : "empty"}">
+        ${this._config.show_header ? `
         <div class="heading">
           <span class="heading-icon">${ICONS.briefcase}</span>
           <div>
-            <div class="eyebrow">KIMAI</div>
             <h2>${escapeHtml(this._config.title)}</h2>
           </div>
         </div>
-        <div class="header-actions">
-          <span class="status ${tone}"><i></i>${escapeHtml(statusLabel)}</span>
-          ${this._config.show_refresh ? `<button class="icon-button" type="button" data-action="refresh" title="Actualizar" aria-label="Actualizar">${ICONS.refresh}</button>` : ""}
-        </div>
+        ` : ""}
+        ${started}
       </header>
       ${activeCount > 1 ? `<div class="message warning">${ICONS.warning}<span>Kimai devuelve varios registros activos. La tarjeta muestra y detiene el registro principal.</span></div>` : ""}
     `;
   }
-  _renderActive(status, data) {
-    const isPaused = status === "paused";
+  _renderActive(data) {
+    const circleControls = this._config.show_finish && this._config.circle_controls && this._config.show_progress_ring;
     const customer = data.customer || "Sin cliente";
     const project = data.project || "Proyecto sin nombre";
     const activity = data.activity || "Actividad sin nombre";
@@ -360,33 +293,47 @@ var KimaiWorkCard = class extends HTMLElement {
         </div>
         <div class="timer-zone">
           ${this._config.show_progress_ring ? `
-            <div class="ring-wrap ${isPaused ? "paused" : ""}">
+            <div class="ring-wrap">
+              ${circleControls ? `<button class="ring-control-hit" type="button" data-action="ring-control" aria-label="Finalizar" title="Finalizar" ${this._busy ? "disabled" : ""}></button>` : ""}
               <svg class="ring" viewBox="0 0 128 128" aria-hidden="true">
                 <circle class="ring-track" cx="64" cy="64" r="54"></circle>
                 <circle class="ring-progress" data-ring-progress cx="64" cy="64" r="54"></circle>
               </svg>
               <div class="timer-center">
                 <div class="timer" data-timer>${formatDuration(this._elapsedSeconds())}</div>
-                <div class="timer-state">${isPaused ? "PAUSADO" : "EN CURSO"}</div>
+                <div class="timer-state">EN CURSO</div>
               </div>
             </div>
           ` : `
             <div class="plain-timer">
               <div class="timer" data-timer>${formatDuration(this._elapsedSeconds())}</div>
-              <div class="timer-state">${isPaused ? "PAUSADO" : "EN CURSO"}</div>
+              <div class="timer-state">EN CURSO</div>
             </div>
           `}
         </div>
       </section>
-      <footer class="footer">
-        <div class="actions">
-          ${this._config.show_pause ? isPaused ? `<button class="button primary" type="button" data-action="resume" ${this._busy ? "disabled" : ""}>${ICONS.play}<span>Reanudar</span></button>` : `<button class="button primary" type="button" data-action="pause" ${this._busy ? "disabled" : ""}>${ICONS.pause}<span>Pausar</span></button>` : ""}
-          ${this._config.show_finish ? `<button class="button danger" type="button" data-action="finish" ${this._busy ? "disabled" : ""}>${ICONS.stop}<span>Finalizar</span></button>` : ""}
-          ${this._config.show_change ? `<button class="button secondary" type="button" data-action="change" ${this._busy ? "disabled" : ""}>${ICONS.swap}<span>Cambiar actividad</span></button>` : ""}
-        </div>
-        ${this._config.show_last_started && data.begin ? `<div class="started">${ICONS.clock}<span>${isPaused ? "Actividad pausada" : "Iniciada"} a las ${escapeHtml(formatClockTime(data.begin, this._locale()))}</span></div>` : ""}
-      </footer>
+      ${this._confirmingFinish ? this._renderFinishConfirmation() : !circleControls && this._config.show_finish ? `<footer class="footer">${this._renderActiveActions()}</footer>` : ""}
       ${this._busy ? `<div class="busy-line"><span></span>${escapeHtml(this._busy)}</div>` : ""}
+    `;
+  }
+  _renderActiveActions() {
+    return `
+      <div class="actions">
+        ${this._config.show_finish ? `<button class="button danger" type="button" data-action="finish" ${this._busy ? "disabled" : ""}>${ICONS.stop}<span>Finalizar</span></button>` : ""}
+      </div>
+    `;
+  }
+  _renderFinishConfirmation() {
+    return `
+      <div class="finish-confirmation" role="alert">
+        <div class="finish-confirmation-panel">
+          <span>\xBFFinalizar el registro actual?</span>
+          <div class="finish-confirmation-actions">
+            <button class="button ghost" type="button" data-action="cancel-finish">Cancelar</button>
+            <button class="button danger" type="button" data-action="confirm-finish">${ICONS.stop}<span>Finalizar</span></button>
+          </div>
+        </div>
+      </div>
     `;
   }
   _detail(label, value, wide = false) {
@@ -398,33 +345,20 @@ var KimaiWorkCard = class extends HTMLElement {
     `;
   }
   _renderIdle(status) {
-    const paused = this._readPaused();
     const unavailable = status === "missing" || status === "unavailable";
     const multiple = status === "multiple";
     const actionsBlocked = unavailable || multiple;
     const text = status === "missing" ? `No se ha encontrado ${this._config.entity}.` : status === "unavailable" ? "La integraci\xF3n Kimai no est\xE1 disponible en este momento." : multiple ? "Kimai ha devuelto varios registros activos. Actualiza o resu\xE9lvelos en Kimai antes de continuar." : "No hay ning\xFAn registro de tiempo activo.";
-    const quickActions = Array.isArray(this._config.quick_actions) ? this._config.quick_actions.slice(0, 6) : [];
     return `
       <section class="idle-content">
         <div class="idle-symbol ${unavailable ? "danger" : ""}">${unavailable || multiple ? ICONS.warning : ICONS.clock}</div>
         <div class="idle-copy">
-          <h3>${paused ? "Actividad pausada" : unavailable ? "Kimai no disponible" : multiple ? "Varios registros activos" : "Listo para empezar"}</h3>
+          <h3>${unavailable ? "Kimai no disponible" : multiple ? "Varios registros activos" : "Listo para empezar"}</h3>
           <p>${escapeHtml(text)}</p>
         </div>
         <div class="actions idle-actions">
-          ${paused ? `<button class="button primary" type="button" data-action="resume" ${this._busy ? "disabled" : ""}>${ICONS.play}<span>Reanudar ${escapeHtml(paused.activity || "actividad")}</span></button>` : ""}
-          ${!actionsBlocked ? `<button class="button ${paused ? "secondary" : "primary"}" type="button" data-action="start" ${this._busy ? "disabled" : ""}>${ICONS.plus}<span>Iniciar actividad</span></button>` : ""}
-          ${paused ? `<button class="button ghost" type="button" data-action="discard-pause" ${this._busy ? "disabled" : ""}>${ICONS.close}<span>Descartar pausa</span></button>` : ""}
+          ${!actionsBlocked ? `<button class="button primary" type="button" data-action="start" ${this._busy ? "disabled" : ""}>${ICONS.plus}<span>Iniciar actividad</span></button>` : ""}
         </div>
-        ${quickActions.length && !actionsBlocked ? `
-          <div class="quick-actions" aria-label="Acciones r\xE1pidas">
-            ${quickActions.map((action, index) => `
-              <button class="quick-chip" type="button" data-quick-index="${index}" ${this._busy ? "disabled" : ""}>
-                <span>${escapeHtml(action.name || `Acci\xF3n ${index + 1}`)}</span>
-              </button>
-            `).join("")}
-          </div>
-        ` : ""}
         ${this._busy ? `<div class="busy-line"><span></span>${escapeHtml(this._busy)}</div>` : ""}
       </section>
     `;
@@ -483,13 +417,6 @@ var KimaiWorkCard = class extends HTMLElement {
         this._handleAction(action);
       });
     });
-    this.shadowRoot.querySelectorAll("[data-quick-index]").forEach((element) => {
-      element.addEventListener("click", () => {
-        const index = Number(element.dataset.quickIndex);
-        const action = this._config.quick_actions?.[index];
-        if (!this._busy && action) this._runQuickAction(action);
-      });
-    });
     const form = this.shadowRoot.querySelector("[data-dialog-form]");
     if (form) {
       form.addEventListener("submit", (event) => {
@@ -512,24 +439,24 @@ var KimaiWorkCard = class extends HTMLElement {
       case "refresh":
         await this._callService("refresh", {}, "Actualizando\u2026");
         break;
-      case "pause":
-        await this._pause();
-        break;
-      case "resume":
-        await this._resume();
-        break;
       case "finish":
+        this._requestFinish();
+        break;
+      case "ring-control":
+        this._requestFinish();
+        break;
+      case "confirm-finish":
         await this._finish();
         break;
+      case "cancel-finish":
+        this._confirmingFinish = false;
+        this._render();
+        break;
       case "change":
-        this._openDialog("change", this._entity?.attributes || this._readPaused() || {});
+        this._openDialog("change", this._entity?.attributes || {});
         break;
       case "start":
         this._openDialog("start", {});
-        break;
-      case "discard-pause":
-        this._writePaused(null);
-        this._render();
         break;
       case "close-dialog":
         this._dialogOpen = false;
@@ -561,94 +488,26 @@ var KimaiWorkCard = class extends HTMLElement {
     const service = this._dialogMode === "change" && this._status() === "working" ? "switch_timesheet" : "start_timesheet";
     const ok = await this._callService(service, data, this._dialogMode === "change" ? "Cambiando actividad\u2026" : "Iniciando actividad\u2026");
     if (ok) {
-      this._writePaused(null);
       this._dialogOpen = false;
       this._render();
     }
   }
-  async _runQuickAction(action) {
-    if (this._busy) return;
-    const data = {
-      project_id: asInteger(action.project_id),
-      activity_id: asInteger(action.activity_id),
-      description: action.description,
-      billable: typeof action.billable === "boolean" ? action.billable : true,
-      tags: normalizeTags(action.tags)
-    };
-    if (!data.project_id || !data.activity_id) {
-      this._errorMessage = `La acci\xF3n r\xE1pida \u201C${action.name || "sin nombre"}\u201D necesita project_id y activity_id.`;
+  _requestFinish() {
+    if (this._config.confirm_finish) {
+      this._confirmingFinish = true;
       this._render();
       return;
     }
-    const service = this._status() === "working" ? "switch_timesheet" : "start_timesheet";
-    const ok = await this._callService(service, data, `Iniciando ${action.name || "actividad"}\u2026`);
-    if (ok) this._writePaused(null);
-  }
-  async _pause() {
-    const attrs = this._entity?.attributes || {};
-    const projectId = asInteger(attrs.project_id);
-    const activityId = asInteger(attrs.activity_id);
-    if (!projectId || !activityId) {
-      this._errorMessage = "Kimai no ha devuelto los IDs de proyecto y actividad; no se puede reanudar de forma segura.";
-      this._render();
-      return;
-    }
-    const paused = {
-      project_id: projectId,
-      activity_id: activityId,
-      customer: attrs.customer,
-      project: attrs.project,
-      activity: attrs.activity,
-      description: attrs.description,
-      billable: attrs.billable,
-      tags: attrs.tags,
-      begin: attrs.begin,
-      elapsed_seconds: this._elapsedSeconds(),
-      paused_at: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    this._writePaused(paused);
-    const ok = await this._callService(
-      "stop_timesheet",
-      { timesheet_id: asInteger(attrs.timesheet_id) },
-      "Pausando\u2026"
-    );
-    if (!ok) this._writePaused(null);
-  }
-  async _resume() {
-    const paused = this._readPaused();
-    if (!paused) {
-      this._errorMessage = "No hay una actividad pausada para reanudar.";
-      this._render();
-      return;
-    }
-    const ok = await this._callService(
-      "start_timesheet",
-      {
-        project_id: paused.project_id,
-        activity_id: paused.activity_id,
-        description: paused.description,
-        billable: typeof paused.billable === "boolean" ? paused.billable : true,
-        tags: normalizeTags(paused.tags)
-      },
-      "Reanudando\u2026"
-    );
-    if (ok) this._writePaused(null);
+    this._finish();
   }
   async _finish() {
-    if (this._config.confirm_finish && !window.confirm("\xBFFinalizar el registro actual de Kimai?")) return;
-    const status = this._status();
-    if (status === "paused") {
-      this._writePaused(null);
-      this._render();
-      return;
-    }
+    this._confirmingFinish = false;
     const attrs = this._entity?.attributes || {};
     const ok = await this._callService(
       "stop_timesheet",
       { timesheet_id: asInteger(attrs.timesheet_id) },
       "Finalizando\u2026"
     );
-    if (ok) this._writePaused(null);
   }
   async _callService(service, data, busyLabel) {
     if (this._busy) return false;
@@ -699,41 +558,14 @@ var KimaiWorkCard = class extends HTMLElement {
 
       .card {
         position: relative;
-        min-height: 100%;
+        min-height: 0;
         overflow: hidden;
         padding: 22px;
         border-radius: var(--ha-card-border-radius, 18px);
         border: 1px solid var(--kimai-border);
-        background:
-          linear-gradient(135deg, color-mix(in srgb, var(--kimai-accent) 8%, transparent), transparent 34%),
-          var(--kimai-card-bg);
+        background: var(--kimai-card-bg);
         color: var(--kimai-text);
         box-shadow: var(--ha-card-box-shadow, 0 10px 30px rgba(0,0,0,.16));
-      }
-
-      .card::before,
-      .card::after {
-        content: "";
-        position: absolute;
-        pointer-events: none;
-      }
-
-      .card::before {
-        inset: 0 auto auto 0;
-        width: 92px;
-        height: 2px;
-        background: linear-gradient(90deg, var(--kimai-accent), transparent);
-        opacity: .9;
-      }
-
-      .card::after {
-        right: 18px;
-        bottom: 14px;
-        width: 48px;
-        height: 18px;
-        border-right: 1px solid color-mix(in srgb, var(--kimai-accent) 45%, transparent);
-        border-bottom: 1px solid color-mix(in srgb, var(--kimai-accent) 45%, transparent);
-        opacity: .55;
       }
 
       .forced-dark {
@@ -752,18 +584,19 @@ var KimaiWorkCard = class extends HTMLElement {
 
       .header,
       .heading,
-      .header-actions,
       .actions,
       .started,
       .busy-line,
       .message,
-      .status,
       .checkbox-row {
         display: flex;
         align-items: center;
       }
 
-      .header { justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+      .header { gap: 16px; margin-bottom: 20px; }
+      .header.empty { display: none; }
+      .heading { margin-right: auto; }
+      .header.without-heading { justify-content: flex-end; }
       .heading { gap: 12px; min-width: 0; }
       .heading-icon {
         width: 40px;
@@ -777,42 +610,6 @@ var KimaiWorkCard = class extends HTMLElement {
         font-size: 22px;
       }
       .heading h2, .dialog h3 { margin: 1px 0 0; font-size: 20px; line-height: 1.2; }
-      .eyebrow { color: var(--kimai-accent); font-size: 10px; letter-spacing: .18em; font-weight: 800; }
-      .header-actions { gap: 9px; }
-
-      .status {
-        gap: 7px;
-        min-height: 32px;
-        padding: 0 11px;
-        border-radius: 999px;
-        background: var(--kimai-surface);
-        color: var(--kimai-muted);
-        border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-        font-size: 12px;
-        font-weight: 700;
-        white-space: nowrap;
-      }
-      .status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
-      .status.success { color: var(--kimai-success); }
-      .status.warning { color: var(--kimai-warning); }
-      .status.danger { color: var(--kimai-danger); }
-
-      .icon-button {
-        width: 36px;
-        height: 36px;
-        border-radius: 11px;
-        border: 1px solid var(--kimai-border);
-        display: grid;
-        place-items: center;
-        background: var(--kimai-surface);
-        color: var(--kimai-muted);
-        cursor: pointer;
-        font-size: 18px;
-        transition: transform .15s ease, color .15s ease, border-color .15s ease;
-      }
-      .icon-button:hover { color: var(--kimai-accent); border-color: color-mix(in srgb, var(--kimai-accent) 45%, transparent); }
-      .icon-button:active { transform: scale(.96); }
-
       .message {
         gap: 9px;
         margin: -6px 0 16px;
@@ -826,28 +623,33 @@ var KimaiWorkCard = class extends HTMLElement {
       .message.error { color: var(--kimai-danger); background: color-mix(in srgb, var(--kimai-danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--kimai-danger) 25%, transparent); }
 
       .active-content { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center; }
-      .details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 22px; min-width: 0; }
+      .details { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
       .detail { min-width: 0; }
-      .detail.wide { grid-column: 1 / -1; }
       .detail-label { display: block; margin-bottom: 5px; color: var(--kimai-muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
       .detail-value { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--kimai-text); font-size: 16px; font-weight: 700; line-height: 1.35; }
-      .detail.wide .detail-value { white-space: normal; font-size: 13px; color: var(--kimai-muted); font-weight: 500; }
+      .detail.wide { margin-top: 2px; }
+      .detail.wide .detail-value { white-space: normal; font-size: 12px; color: var(--kimai-muted); font-weight: 500; }
 
       .timer-zone { min-width: 190px; display: grid; place-items: center; }
       .ring-wrap { width: 178px; height: 178px; position: relative; display: grid; place-items: center; }
+      .ring-control-hit { position: absolute; z-index: 1; inset: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+      .ring-control-hit:hover + .ring .ring-progress { stroke-width: 6; }
+      .ring-control-hit:focus-visible { outline: 2px solid var(--kimai-accent); outline-offset: 5px; }
+      .ring-control-hit[disabled] { cursor: wait; }
       .ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); filter: drop-shadow(0 0 8px color-mix(in srgb, var(--kimai-accent) 28%, transparent)); }
       .ring-track, .ring-progress { fill: none; stroke-width: 5; }
       .ring-track { stroke: color-mix(in srgb, var(--kimai-accent) 11%, var(--kimai-surface)); }
       .ring-progress { stroke: var(--kimai-accent); stroke-linecap: round; transition: stroke-dashoffset .3s linear; }
-      .ring-wrap.paused .ring-progress { stroke: var(--kimai-warning); }
-      .timer-center { position: relative; text-align: center; }
+      .timer-center { position: relative; z-index: 2; text-align: center; pointer-events: none; }
       .timer { color: var(--kimai-text); font-size: 29px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.04em; font-weight: 800; }
       .timer-state { margin-top: 8px; color: var(--kimai-accent); font-size: 10px; font-weight: 900; letter-spacing: .18em; }
-      .paused .timer-state { color: var(--kimai-warning); }
       .plain-timer { min-width: 190px; padding: 24px 20px; text-align: center; border-radius: 18px; background: var(--kimai-surface); border: 1px solid var(--kimai-border); }
 
       .footer { margin-top: 22px; padding-top: 18px; border-top: 1px solid color-mix(in srgb, var(--kimai-border) 68%, transparent); }
       .actions { flex-wrap: wrap; gap: 10px; }
+      .finish-confirmation { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; padding: 22px; background: color-mix(in srgb, var(--kimai-card-bg) 72%, transparent); backdrop-filter: blur(3px); }
+      .finish-confirmation-panel { display: grid; gap: 14px; width: min(310px, 100%); padding: 18px; border: 1px solid color-mix(in srgb, var(--kimai-danger) 35%, var(--kimai-border)); border-radius: 14px; color: var(--kimai-text); background: var(--kimai-card-bg); box-shadow: 0 16px 40px rgba(0,0,0,.25); font-size: 13px; font-weight: 700; text-align: center; }
+      .finish-confirmation-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
       .button {
         min-height: 42px;
         padding: 0 15px;
@@ -872,7 +674,8 @@ var KimaiWorkCard = class extends HTMLElement {
       .button.danger { color: var(--kimai-danger); background: color-mix(in srgb, var(--kimai-danger) 10%, transparent); border-color: color-mix(in srgb, var(--kimai-danger) 28%, transparent); }
       .button.secondary { color: var(--kimai-text); border-color: var(--kimai-border); }
       .button.ghost { color: var(--kimai-muted); background: transparent; border-color: color-mix(in srgb, var(--kimai-muted) 20%, transparent); }
-      .started { gap: 7px; margin-top: 13px; color: var(--kimai-muted); font-size: 11px; }
+      .started { gap: 7px; color: var(--kimai-muted); font-size: 11px; }
+      .header-started { margin-left: auto; white-space: nowrap; }
       .started svg { font-size: 14px; }
 
       .busy-line { gap: 9px; margin-top: 13px; color: var(--kimai-muted); font-size: 12px; }
@@ -880,15 +683,14 @@ var KimaiWorkCard = class extends HTMLElement {
       .busy-line > span::after { content: ""; position: absolute; inset: 0; width: 45%; background: var(--kimai-accent); animation: loading 1s ease-in-out infinite; }
       @keyframes loading { 0% { transform: translateX(-110%); } 100% { transform: translateX(240%); } }
 
-      .idle-content { min-height: 250px; display: grid; place-items: center; align-content: center; text-align: center; padding: 18px 10px 8px; }
-      .idle-symbol { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 20px; color: var(--kimai-accent); background: color-mix(in srgb, var(--kimai-accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--kimai-accent) 25%, transparent); font-size: 30px; }
+      .idle-content { min-height: 178px; height: 178px; display: grid; place-items: center; align-content: center; text-align: center; padding: 0 10px; overflow: hidden; }
+      .with-active-footer .idle-content { min-height: 260px; height: 260px; }
+      .idle-symbol { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: var(--kimai-accent); background: color-mix(in srgb, var(--kimai-accent) 10%, transparent); border: 1px solid color-mix(in srgb, var(--kimai-accent) 25%, transparent); font-size: 24px; }
       .idle-symbol.danger { color: var(--kimai-danger); background: color-mix(in srgb, var(--kimai-danger) 10%, transparent); border-color: color-mix(in srgb, var(--kimai-danger) 25%, transparent); }
-      .idle-copy h3 { margin: 15px 0 5px; font-size: 20px; }
-      .idle-copy p { margin: 0; color: var(--kimai-muted); font-size: 13px; }
-      .idle-actions { margin-top: 18px; justify-content: center; }
-      .quick-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-      .quick-chip { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--kimai-border); background: var(--kimai-surface); color: var(--kimai-muted); cursor: pointer; font-size: 12px; font-weight: 700; }
-      .quick-chip:hover { color: var(--kimai-accent); border-color: color-mix(in srgb, var(--kimai-accent) 42%, transparent); }
+      .idle-copy h3 { margin: 10px 0 3px; font-size: 16px; }
+      .idle-copy p { margin: 0; color: var(--kimai-muted); font-size: 12px; line-height: 1.3; }
+      .idle-actions { margin-top: 10px; justify-content: center; }
+      .idle-actions .button { min-height: 36px; }
 
       .dialog-backdrop { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 20px; background: rgba(4,10,16,.64); backdrop-filter: blur(8px); }
       .dialog { width: min(520px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 22px; border-radius: 20px; color: var(--primary-text-color, #f5f7fb); background: var(--ha-card-background, var(--card-background-color, #101b26)); border: 1px solid color-mix(in srgb, var(--kimai-accent) 30%, var(--divider-color, transparent)); box-shadow: 0 24px 80px rgba(0,0,0,.42); }
@@ -918,24 +720,23 @@ var KimaiWorkCard = class extends HTMLElement {
       .compact .timer { font-size: 25px; }
       .compact .footer { margin-top: 15px; padding-top: 14px; }
       .compact .detail-value { font-size: 14px; }
+      .compact .idle-content { min-height: 150px; height: 150px; }
+      .compact.with-active-footer .idle-content { min-height: 221px; height: 221px; }
 
       @media (max-width: 620px) {
         .card { padding: 18px; }
         .active-content { grid-template-columns: 1fr; }
         .timer-zone { order: -1; min-width: 0; }
-        .details { grid-template-columns: 1fr 1fr; }
         .footer { text-align: center; }
+        .finish-confirmation-actions { justify-content: center; }
         .actions { justify-content: center; }
         .started { justify-content: center; }
         .header { align-items: flex-start; }
-        .header-actions { align-items: flex-end; flex-direction: column-reverse; }
       }
 
       @media (max-width: 430px) {
-        .details, .form-grid { grid-template-columns: 1fr; }
-        .detail.wide { grid-column: auto; }
+        .form-grid { grid-template-columns: 1fr; }
         .actions .button { flex: 1 1 130px; }
-        .status { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
       }
 
       @media (prefers-reduced-motion: reduce) {
