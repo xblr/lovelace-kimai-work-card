@@ -3,7 +3,7 @@ var CARD_VERSION = "0.1.0";
 var CARD_TAG = "kimai-work-card";
 var EDITOR_NAME = "Kimai Work Card";
 var DEFAULTS = Object.freeze({
-  title: "Trabajo actual",
+  title: "",
   theme: "auto",
   accent_color: "",
   show_header: true,
@@ -15,6 +15,72 @@ var DEFAULTS = Object.freeze({
   circle_controls: false,
   compact: false,
   confirm_finish: false
+});
+var TEXT = Object.freeze({
+  en: {
+    title: "Current work",
+    noCustomer: "No customer",
+    unnamedProject: "Unnamed project",
+    unnamedActivity: "Unnamed activity",
+    customer: "Customer",
+    project: "Project",
+    activity: "Activity",
+    description: "Description",
+    finish: "Finish",
+    confirmFinish: "Finish the current timesheet?",
+    cancel: "Cancel",
+    unavailable: "Kimai unavailable",
+    multiple: "Multiple active records",
+    ready: "Ready to start",
+    missing: "{entity} was not found.",
+    unavailableText: "The Kimai integration is not available right now.",
+    multipleText: "Kimai returned multiple active records. Resolve them in Kimai before continuing.",
+    noActive: "There is no active timesheet.",
+    start: "Start activity",
+    change: "Change activity",
+    close: "Close",
+    projectId: "Project ID",
+    activityId: "Activity ID",
+    tags: "Tags",
+    billable: "Billable time",
+    optional: "Optional",
+    entityRequired: "Kimai Work Card requires an entity, for example sensor.kimai_current_work.",
+    requiredIds: "Project ID and Activity ID are required.",
+    actionFailed: "Kimai could not complete the action. Check the integration status and try again.",
+    note: "Project and activity IDs can be found in Kimai URLs or its API. A future version may load them automatically."
+  },
+  es: {
+    title: "Trabajo actual",
+    noCustomer: "Sin cliente",
+    unnamedProject: "Proyecto sin nombre",
+    unnamedActivity: "Actividad sin nombre",
+    customer: "Cliente",
+    project: "Proyecto",
+    activity: "Actividad",
+    description: "Descripci\xF3n",
+    finish: "Finalizar",
+    confirmFinish: "\xBFFinalizar el registro actual?",
+    cancel: "Cancelar",
+    unavailable: "Kimai no disponible",
+    multiple: "Varios registros activos",
+    ready: "Listo para empezar",
+    missing: "No se ha encontrado {entity}.",
+    unavailableText: "La integraci\xF3n Kimai no est\xE1 disponible en este momento.",
+    multipleText: "Kimai ha devuelto varios registros activos. Actualiza o resu\xE9lvelos en Kimai antes de continuar.",
+    noActive: "No hay ning\xFAn registro de tiempo activo.",
+    start: "Iniciar actividad",
+    change: "Cambiar actividad",
+    close: "Cerrar",
+    projectId: "Proyecto ID",
+    activityId: "Actividad ID",
+    tags: "Etiquetas",
+    billable: "Tiempo facturable",
+    optional: "Opcional",
+    entityRequired: "Kimai Work Card necesita una entidad, por ejemplo sensor.kimai_trabajo_actual.",
+    requiredIds: "Proyecto ID y Actividad ID son obligatorios.",
+    actionFailed: "No se pudo completar la acci\xF3n en Kimai. Revisa el estado de la integraci\xF3n e int\xE9ntalo de nuevo.",
+    note: "Los identificadores de proyecto y actividad se pueden consultar en las URLs o en la API de Kimai. Una versi\xF3n posterior podr\xE1 cargarlos autom\xE1ticamente."
+  }
 });
 var ICONS = Object.freeze({
   briefcase: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5V3h6v2h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4Zm2 0h2V4h-2v1Zm-6 6v7h14v-7h-5v2h-4v-2H5Zm7 0v-1h-2v1h2ZM5 7v2h5V8h4v1h5V7H5Z"/></svg>',
@@ -77,8 +143,7 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   static getStubConfig() {
     return {
-      entity: "sensor.kimai_trabajo_actual",
-      title: "Trabajo actual"
+      entity: "sensor.kimai_trabajo_actual"
     };
   }
   static getConfigForm() {
@@ -129,29 +194,29 @@ var KimaiWorkCard = class extends HTMLElement {
       ],
       computeLabel: (schema) => {
         const labels = {
-          entity: "Entidad de trabajo actual",
-          title: "T\xEDtulo",
-          config_entry_id: "ID de entrada de configuraci\xF3n (solo si hay varias cuentas)",
-          theme: "Tema",
-          accent_color: "Color de acento CSS, por ejemplo #2aa7ff",
-          show_header: "Mostrar cabecera",
-          compact: "Modo compacto",
-          confirm_finish: "Confirmar antes de finalizar",
-          show_customer: "Mostrar cliente",
-          show_description: "Mostrar descripci\xF3n",
-          show_last_started: "Mostrar hora de inicio",
-          show_progress_ring: "Mostrar anillo del cron\xF3metro",
-          show_finish: "Mostrar finalizar",
-          circle_controls: "Controlar con el c\xEDrculo"
+          entity: "Current work entity",
+          title: "Title",
+          config_entry_id: "Config entry ID (only if multiple accounts are configured)",
+          theme: "Theme",
+          accent_color: "CSS accent color, for example #2aa7ff",
+          show_header: "Show header",
+          compact: "Compact mode",
+          confirm_finish: "Confirm before finishing",
+          show_customer: "Show customer",
+          show_description: "Show description",
+          show_last_started: "Show start time",
+          show_progress_ring: "Show timer ring",
+          show_finish: "Show finish",
+          circle_controls: "Control with the circle"
         };
         return labels[schema.name];
       },
       computeHelper: (schema) => {
         if (schema.name === "config_entry_id") {
-          return "D\xE9jalo vac\xEDo si solo tienes una integraci\xF3n Kimai configurada.";
+          return "Leave empty when only one Kimai integration is configured.";
         }
         if (schema.name === "accent_color") {
-          return "Vac\xEDo para utilizar el color primario del tema de Home Assistant.";
+          return "Leave empty to use Home Assistant's primary theme color.";
         }
         return void 0;
       }
@@ -159,7 +224,7 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   setConfig(config) {
     if (!config?.entity) {
-      throw new Error("Kimai Work Card necesita una entidad, por ejemplo sensor.kimai_trabajo_actual");
+      throw new Error(TEXT.en.entityRequired);
     }
     this._config = { ...DEFAULTS, ...config };
     this._render();
@@ -195,6 +260,13 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   _locale() {
     return this._hass?.locale?.language || this._hass?.language || "es-ES";
+  }
+  _t(key, values = {}) {
+    const language = this._locale().toLowerCase().startsWith("es") ? "es" : "en";
+    return (TEXT[language][key] || TEXT.en[key] || key).replace(
+      /\{(\w+)\}/g,
+      (_match, name) => String(values[name] ?? "")
+    );
   }
   _status() {
     const state = this._entity?.state;
@@ -268,7 +340,7 @@ var KimaiWorkCard = class extends HTMLElement {
         <div class="heading">
           <span class="heading-icon">${ICONS.briefcase}</span>
           <div>
-            <h2>${escapeHtml(this._config.title)}</h2>
+            <h2>${escapeHtml(this._config.title || this._t("title"))}</h2>
           </div>
         </div>
         ` : ""}
@@ -279,22 +351,22 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   _renderActive(data) {
     const circleControls = this._config.show_finish && this._config.circle_controls && this._config.show_progress_ring;
-    const customer = data.customer || "Sin cliente";
-    const project = data.project || "Proyecto sin nombre";
-    const activity = data.activity || "Actividad sin nombre";
+    const customer = data.customer || this._t("noCustomer");
+    const project = data.project || this._t("unnamedProject");
+    const activity = data.activity || this._t("unnamedActivity");
     const description = data.description;
     return `
       <section class="content active-content">
         <div class="details">
-          ${this._config.show_customer ? this._detail("Cliente", customer) : ""}
-          ${this._detail("Proyecto", project)}
-          ${this._detail("Actividad", activity)}
-          ${this._config.show_description && description ? this._detail("Descripci\xF3n", description, true) : ""}
+          ${this._config.show_customer ? this._detail(this._t("customer"), customer) : ""}
+          ${this._detail(this._t("project"), project)}
+          ${this._detail(this._t("activity"), activity)}
+          ${this._config.show_description && description ? this._detail(this._t("description"), description, true) : ""}
         </div>
         <div class="timer-zone">
           ${this._config.show_progress_ring ? `
             <div class="ring-wrap">
-              ${circleControls ? `<button class="ring-control-hit" type="button" data-action="ring-control" aria-label="Finalizar" title="Finalizar" ${this._busy ? "disabled" : ""}></button>` : ""}
+              ${circleControls ? `<button class="ring-control-hit" type="button" data-action="ring-control" aria-label="${this._t("finish")}" title="${this._t("finish")}" ${this._busy ? "disabled" : ""}></button>` : ""}
               <svg class="ring" viewBox="0 0 128 128" aria-hidden="true">
                 <circle class="ring-track" cx="64" cy="64" r="54"></circle>
                 <circle class="ring-progress" data-ring-progress cx="64" cy="64" r="54"></circle>
@@ -319,7 +391,7 @@ var KimaiWorkCard = class extends HTMLElement {
   _renderActiveActions() {
     return `
       <div class="actions">
-        ${this._config.show_finish ? `<button class="button danger" type="button" data-action="finish" ${this._busy ? "disabled" : ""}>${ICONS.stop}<span>Finalizar</span></button>` : ""}
+        ${this._config.show_finish ? `<button class="button danger" type="button" data-action="finish" ${this._busy ? "disabled" : ""}>${ICONS.stop}<span>${this._t("finish")}</span></button>` : ""}
       </div>
     `;
   }
@@ -327,10 +399,10 @@ var KimaiWorkCard = class extends HTMLElement {
     return `
       <div class="finish-confirmation" role="alert">
         <div class="finish-confirmation-panel">
-          <span>\xBFFinalizar el registro actual?</span>
+          <span>${this._t("confirmFinish")}</span>
           <div class="finish-confirmation-actions">
-            <button class="button ghost" type="button" data-action="cancel-finish">Cancelar</button>
-            <button class="button danger" type="button" data-action="confirm-finish">${ICONS.stop}<span>Finalizar</span></button>
+            <button class="button ghost" type="button" data-action="cancel-finish">${this._t("cancel")}</button>
+            <button class="button danger" type="button" data-action="confirm-finish">${ICONS.stop}<span>${this._t("finish")}</span></button>
           </div>
         </div>
       </div>
@@ -348,16 +420,16 @@ var KimaiWorkCard = class extends HTMLElement {
     const unavailable = status === "missing" || status === "unavailable";
     const multiple = status === "multiple";
     const actionsBlocked = unavailable || multiple;
-    const text = status === "missing" ? `No se ha encontrado ${this._config.entity}.` : status === "unavailable" ? "La integraci\xF3n Kimai no est\xE1 disponible en este momento." : multiple ? "Kimai ha devuelto varios registros activos. Actualiza o resu\xE9lvelos en Kimai antes de continuar." : "No hay ning\xFAn registro de tiempo activo.";
+    const text = status === "missing" ? this._t("missing", { entity: this._config.entity }) : status === "unavailable" ? this._t("unavailableText") : multiple ? this._t("multipleText") : this._t("noActive");
     return `
       <section class="idle-content">
         <div class="idle-symbol ${unavailable ? "danger" : ""}">${unavailable || multiple ? ICONS.warning : ICONS.clock}</div>
         <div class="idle-copy">
-          <h3>${unavailable ? "Kimai no disponible" : multiple ? "Varios registros activos" : "Listo para empezar"}</h3>
+          <h3>${unavailable ? this._t("unavailable") : multiple ? this._t("multiple") : this._t("ready")}</h3>
           <p>${escapeHtml(text)}</p>
         </div>
         <div class="actions idle-actions">
-          ${!actionsBlocked ? `<button class="button primary" type="button" data-action="start" ${this._busy ? "disabled" : ""}>${ICONS.plus}<span>Iniciar actividad</span></button>` : ""}
+          ${!actionsBlocked ? `<button class="button primary" type="button" data-action="start" ${this._busy ? "disabled" : ""}>${ICONS.plus}<span>${this._t("start")}</span></button>` : ""}
         </div>
         ${this._busy ? `<div class="busy-line"><span></span>${escapeHtml(this._busy)}</div>` : ""}
       </section>
@@ -365,7 +437,7 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   _renderDialog() {
     const defaults = this._dialogDefaults || {};
-    const title = this._dialogMode === "change" ? "Cambiar actividad" : "Iniciar actividad";
+    const title = this._dialogMode === "change" ? this._t("change") : this._t("start");
     return `
       <div class="dialog-backdrop" data-action="close-dialog" role="presentation">
         <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="kimai-dialog-title" data-dialog-panel>
@@ -374,35 +446,35 @@ var KimaiWorkCard = class extends HTMLElement {
               <div class="eyebrow">KIMAI</div>
               <h3 id="kimai-dialog-title">${title}</h3>
             </div>
-            <button class="icon-button" type="button" data-action="close-dialog" aria-label="Cerrar">${ICONS.close}</button>
+            <button class="icon-button" type="button" data-action="close-dialog" aria-label="${this._t("close")}">${ICONS.close}</button>
           </header>
           <form data-dialog-form>
             <div class="form-grid">
               <label>
-                <span>Proyecto ID</span>
+                <span>${this._t("projectId")}</span>
                 <input name="project_id" type="number" min="1" required value="${escapeHtml(defaults.project_id || "")}" inputmode="numeric">
               </label>
               <label>
-                <span>Actividad ID</span>
+                <span>${this._t("activityId")}</span>
                 <input name="activity_id" type="number" min="1" required value="${escapeHtml(defaults.activity_id || "")}" inputmode="numeric">
               </label>
             </div>
             <label>
-              <span>Descripci\xF3n</span>
-              <textarea name="description" rows="3" placeholder="Opcional">${escapeHtml(defaults.description || "")}</textarea>
+              <span>${this._t("description")}</span>
+              <textarea name="description" rows="3" placeholder="${this._t("optional")}">${escapeHtml(defaults.description || "")}</textarea>
             </label>
             <label>
-              <span>Etiquetas</span>
+              <span>${this._t("tags")}</span>
               <input name="tags" type="text" value="${escapeHtml(normalizeTags(defaults.tags))}" placeholder="Separadas por comas">
             </label>
             <label class="checkbox-row">
               <input name="billable" type="checkbox" ${defaults.billable === false ? "" : "checked"}>
-              <span>Tiempo facturable</span>
+              <span>${this._t("billable")}</span>
             </label>
-            <div class="dialog-note">Los identificadores se pueden consultar en las URLs o en la API de Kimai. Una versi\xF3n posterior podr\xE1 cargar proyectos y actividades autom\xE1ticamente.</div>
+            <div class="dialog-note">${this._t("note")}</div>
             <div class="dialog-actions">
-              <button class="button ghost" type="button" data-action="close-dialog">Cancelar</button>
-              <button class="button primary" type="submit">${this._dialogMode === "change" ? ICONS.swap : ICONS.play}<span>${this._dialogMode === "change" ? "Cambiar" : "Iniciar"}</span></button>
+              <button class="button ghost" type="button" data-action="close-dialog">${this._t("cancel")}</button>
+              <button class="button primary" type="submit">${this._dialogMode === "change" ? ICONS.swap : ICONS.play}<span>${this._dialogMode === "change" ? this._t("change") : this._t("start")}</span></button>
             </div>
           </form>
         </section>
@@ -481,7 +553,7 @@ var KimaiWorkCard = class extends HTMLElement {
   }
   async _submitDialog(data) {
     if (!data.project_id || !data.activity_id) {
-      this._errorMessage = "Proyecto ID y Actividad ID son obligatorios.";
+      this._errorMessage = this._t("requiredIds");
       this._render();
       return;
     }
@@ -527,7 +599,7 @@ var KimaiWorkCard = class extends HTMLElement {
       await this._hass.callService("kimai", service, payload);
       return true;
     } catch (error) {
-      this._errorMessage = "No se pudo completar la acci\xF3n en Kimai. Revisa el estado de la integraci\xF3n e int\xE9ntalo de nuevo.";
+      this._errorMessage = this._t("actionFailed");
       return false;
     } finally {
       this._busy = "";

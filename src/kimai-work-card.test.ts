@@ -70,6 +70,14 @@ describe("Kimai Work Card actions", () => {
     expect(card._renderActive({})).not.toContain('class="footer"');
   });
 
+  it("uses English card text outside Spanish Home Assistant locales", () => {
+    const card = new KimaiWorkCard();
+    card.setConfig({ entity: "sensor.kimai_current_work" });
+    card.hass = { language: "en-US", states: {} };
+
+    expect(card._renderActive({})).toContain("Customer");
+  });
+
   it("does not submit a second service call while one is running", async () => {
     let resolveFirstCall: (() => void) | undefined;
     const callService = () => new Promise<void>((resolve) => {
